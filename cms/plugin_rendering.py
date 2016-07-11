@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def log(message, *args, **kwargs):
     func = kwargs.get('func', logger.info)
-    bits = [str(message)] + [str(arg) for arg in args]
+    bits = ['PLUGIN_RENDERING DEBUG', str(message)] + [str(arg) for arg in args]
     func(' - '.join(bits))
 
 # these are always called before all other plugin context processors
@@ -120,7 +120,7 @@ def render_placeholder(placeholder, context_to_copy,
         log('-- request has no placeholders attr')
         request.placeholders = []
     if placeholder.has_change_permission(request) or not placeholder.cache_placeholder:
-        log('-- user does not have change perm')
+        log('-- user does have change perm')
         request.placeholders.append(placeholder)
     if hasattr(placeholder, 'content_cache'):
         log('-- placeholder has content_cache, returning')
