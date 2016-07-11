@@ -12,6 +12,16 @@ from cms.utils.django_load import iterload_objects
 from cms.utils.placeholder import get_placeholder_conf, restore_sekizai_context
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def log(message, *args, **kwargs):
+    func = kwargs.get('func', logger.info)
+    bits = [str(message)] + [str(arg) for arg in args]
+    func(' - '.join(bits))
+
 # these are always called before all other plugin context processors
 from sekizai.helpers import Watcher
 
@@ -98,17 +108,22 @@ def render_placeholder(placeholder, context_to_copy,
     during rendering. This is primarily used for the "as" variant of the
     render_placeholder tag.
     """
+    log('render_placeholder', placeholder)
     if not placeholder:
+        log('-- no placeholder')
         return
     from cms.utils.plugins import get_plugins
     context = context_to_copy
     context.push()
     request = context['request']
     if not hasattr(request, 'placeholders'):
+        log('-- request has no placeholders attr')
         request.placeholders = []
     if placeholder.has_change_permission(request) or not placeholder.cache_placeholder:
+        log('-- user does not have change perm')
         request.placeholders.append(placeholder)
     if hasattr(placeholder, 'content_cache'):
+        log('-- placeholder has content_cache, returning')
         return mark_safe(placeholder.content_cache)
     page = placeholder.page if placeholder else None
     # It's kind of duplicate of the similar call in `get_plugins`, but it's required
@@ -121,19 +136,25 @@ def render_placeholder(placeholder, context_to_copy,
 
     # Prepend frontedit toolbar output if applicable
     toolbar = getattr(request, 'toolbar', None)
+    log('toolbar: ', toolbar)
     if getattr(toolbar, 'edit_mode', False) and getattr(placeholder, 'is_editable', True) and editable:
+        log('-- placeholder is editable')
         from cms.middleware.toolbar import toolbar_plugin_processor
         processors = (toolbar_plugin_processor,)
         edit = True
     else:
+        log('-- placeholder is NOT editable')
         processors = None
         edit = False
     from django.core.cache import cache
     if get_cms_setting('PLACEHOLDER_CACHE') and use_cache:
+        log('-- USE placeholder cache')
         cache_key = placeholder.get_cache_key(lang)
         if not edit and placeholder and not hasattr(placeholder, 'cache_checked'):
+            log('---- A')
             cached_value = cache.get(cache_key)
             if not cached_value is None:
+                log('----- B')
                 restore_sekizai_context(context, cached_value['sekizai'])
                 return mark_safe(cached_value['content'])
     if page:
@@ -141,6 +162,7 @@ def render_placeholder(placeholder, context_to_copy,
     else:
         template = None
 
+    log('template:', template)
     plugins = [plugin for plugin in get_plugins(request, placeholder, template, lang=lang)]
 
     # Add extra context as defined in settings, but do not overwrite existing context variables,
@@ -161,10 +183,14 @@ def render_placeholder(placeholder, context_to_copy,
     toolbar_content = ''
 
     if edit and editable:
+        log('-- Edit mode YES')
         if not hasattr(request.toolbar, 'placeholders'):
+            log('---- toolbar has no placeholders attr, setting up')
             request.toolbar.placeholders = {}
         if placeholder.pk not in request.toolbar.placeholders:
+            log('---- placeholder not found in existing toolbar placeholders attr')
             request.toolbar.placeholders[placeholder.pk] = placeholder
+        log('-- rendering placeholder toolbar')
         toolbar_content = mark_safe(render_placeholder_toolbar(placeholder, context, name_fallback, save_language))
     if content:
         content = mark_safe("".join(content))
@@ -179,6 +205,7 @@ def render_placeholder(placeholder, context_to_copy,
     result = render_to_string("cms/toolbar/content.html", context)
     changes = watcher.get_changes()
     if placeholder and not edit and placeholder.cache_placeholder and get_cms_setting('PLACEHOLDER_CACHE') and use_cache:
+        log('setting cache for placeholer')
         cache.set(cache_key, {'content': result, 'sekizai': changes}, get_cms_setting('CACHE_DURATIONS')['content'])
     context.pop()
     return result
